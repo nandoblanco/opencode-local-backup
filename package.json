@@ -1,29 +1,38 @@
 {
   "name": "@nandoblanco/opencode-local-backup",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Local-first, zero-token automatic pre-edit file backup plugin for OpenCode with smart project-root resolution, multi-file patch support, retention pruning, and an interactive /backups diff and restore TUI popup.",
+  "description": "Local-first, zero-token automatic pre-edit file backup plugin for OpenCode with smart project-root resolution, multi-file patch support, retention pruning, and an interactive /backups diff and restore Manager for TUI and OpenCode Desktop.",
   "type": "module",
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
     "./server": "./index.js",
-    "./tui": "./tui.ts"
+    "./tui": "./tui.ts",
+    "./rpc": "./rpc.js",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
   },
   "bin": {
     "opencode-local-backup": "index.js"
   },
   "files": [
     "index.js",
+    "rpc.js",
+    "rpc.d.ts",
     "tui.ts",
+    "gui.tsx",
+    "gui.css",
+    "dist/gui-experimental.cjs",
     "assets/screenshot.png",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --no-warnings --test test/backup.test.js"
+    "build:gui": "vite build",
+    "test": "node --no-warnings --test test/backup.test.js",
+    "test:browser": "node test/gui-smoke.mjs && node test/panel-fallback.mjs"
   },
   "sideEffects": false,
   "engines": {
@@ -39,16 +48,22 @@
     "restore",
     "undo",
     "snapshots",
-    "tui"
+    "tui",
+    "desktop",
+    "gui"
   ],
   "peerDependencies": {
     "@opencode-ai/plugin": ">=2.0.0",
+    "@opencode/plugin": ">=2.2.0",
     "@opentui/core": "*",
     "@opentui/solid": "*",
     "solid-js": "*"
   },
   "peerDependenciesMeta": {
     "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opencode/plugin": {
       "optional": true
     },
     "@opentui/core": {
@@ -60,6 +75,18 @@
     "solid-js": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0",
+    "@opencode/plugin": "^2.2.5",
+    "@opencode/theme": "^2.2.5",
+    "solid-js": "^1.9.18",
+    "vite": "^8.3.5",
+    "vite-plugin-solid": "^2.11.15"
+  },
+  "overrides": {
+    "glob": "14.0.5",
+    "minimatch": "11.0.8"
   },
   "author": "nandoblanco",
   "license": "MIT",

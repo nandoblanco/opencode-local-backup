@@ -17,7 +17,8 @@ import server, {
   pruneOldBackups,
   readBackupSettings,
   writeBackupSettings,
-  installPlugin
+  installPlugin,
+  BackupRpc
 } from "../index.js";
 
 function makeTempProject() {
@@ -324,5 +325,71 @@ test("security & bug fixes: tuple JSONC preservation, path traversal rejection, 
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(tmpConfig, { recursive: true, force: true });
+  }
+});
+
+test("BackupRpc registers and handles list, diff, restore, and prune for OpenCode Desktop", async function () {
+  const root = makeTempProject();
+  try {
+    const fileA = path.join(root, "src", "app.js");
+    fs.writeFileSync(fileA, "const v = 1;\n", "utf8");
+    createBackupSnapshot({
+      root: root,
+      name: "auto-edit-app",
+      tool: "edit",
+      files: [fileA],
+      force: true
+    });
+    fs.writeFileSync(fileA, "const v = 2;\n", "utf8");
+
+    let registeredDef = null;
+    let registeredHandlers = null;
+    const dispose = await server.setup({
+      location: { directory: root },
+      rpc: {
+        async register(def, handlers) {
+          registeredDef = def;
+          registeredHandlers = handlers;
+          return { dispose: async function () {} };
+        }
+      }
+    });
+
+    assert.equal(registeredDef, BackupRpc);
+    assert.ok(BackupRpc.methods);
+    assert.ok(BackupRpc.events);
+    assert.ok(registeredHandlers);
+
+    const listRes = await registeredHandlers.list({ rootDir: root, includeSubprojects: false });
+    assert.equal(listRes.entries.length, 1);
+    assert.equal(listRes.entries[0].relativePath, "src/app.js");
+
+    const diffRes = await registeredHandlers.diff({
+      backupPath: listRes.entries[0].backupPath,
+      originalPath: listRes.entries[0].originalPath
+    });
+    assert.equal(diffRes.status, "modified");
+    assert.ok(diffRes.lines.length > 0);
+
+    const restoreRes = await registeredHandlers.restore({ entry: listRes.entries[0] });
+    assert.equal(fs.readFileSync(fileA, "utf8"), "const v = 1;\n");
+    assert.ok(restoreRes.safetySnapshot);
+
+    const untrustedSource = path.join(root, "not-a-snapshot.txt");
+    fs.writeFileSync(untrustedSource, "not a snapshot", "utf8");
+    const untrustedEntry = { backupPath: untrustedSource, originalPath: fileA };
+    assert.throws(function () { restoreBackupFile(untrustedEntry); }, /project root is required/);
+    await assert.rejects(registeredHandlers.restore({ entry: untrustedEntry }), /project root is required/);
+    await assert.rejects(registeredHandlers.restore({ entry: { ...untrustedEntry, root } }), /not found in the project backup list/);
+    await assert.rejects(registeredHandlers.restore({ entry: { ...listRes.entries[0], originalPath: path.join(root, "other.js") } }), /not found in the project backup list/);
+    assert.equal(fs.readFileSync(fileA, "utf8"), "const v = 1;\n");
+    assert.equal(fs.existsSync(path.join(root, "other.js")), false);
+
+    const pruneRes = await registeredHandlers.prune({ rootDir: root, retentionDays: 30 });
+    assert.equal(pruneRes.disabled, false);
+
+    if (typeof dispose === "function") await dispose();
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

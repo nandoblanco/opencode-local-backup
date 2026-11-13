@@ -462,7 +462,7 @@ function createTuiRenderer() {
           if (sel) executeOpenDiff(sel);
           return;
         }
-        if (name === "return" || name === "enter") {
+        if (name === "return" || name === "enter" || name === "kpenter") {
           evt.preventDefault?.();
           evt.stopPropagation?.();
           const sel = selectedEntry();
@@ -562,7 +562,7 @@ function createTuiRenderer() {
         return;
       }
 
-      if (name === "return" || name === "enter") {
+      if (name === "return" || name === "enter" || name === "kpenter") {
         evt.preventDefault?.();
         evt.stopPropagation?.();
         if (selectedEntry()) {

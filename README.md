@@ -1,8 +1,14 @@
 # opencode-local-backup
 
-**Local-first, automatic pre-edit file backup plugin for OpenCode**: snapshots files automatically in the engine pipeline before any edit tool runs, with zero token usage, smart project-root resolution, retention auto-pruning, and an interactive `/backups` diff and restore TUI popup.
+**Local-first, automatic pre-edit file backup plugin for OpenCode**: snapshots files automatically in the engine pipeline before any edit tool runs, with zero token usage, smart project-root resolution, retention auto-pruning, and an interactive `/backups` diff and restore manager for both OpenCode TUI and OpenCode Desktop.
 
 ![opencode-local-backup TUI preview](./assets/screenshot.png)
+
+## OpenCode Desktop Support
+
+**Now available in OpenCode Desktop as well as the TUI.** Browse snapshots in a persistent Backups side panel, preview unified diffs, and restore files with confirmation, without a model turn. Press `Ctrl+Shift+B` to open or focus the panel, or `Ctrl+Alt+B` to toggle it. When no session is active, the manager opens in a fallback dialog.
+
+One global OpenCode V2 plugin entry loads the server, TUI, and Desktop integration together. Existing automatic pre-edit backups remain available across both interfaces; see [Installation](#installation) for setup.
 
 ## Background
 
@@ -27,7 +33,7 @@ This plugin started as a PowerShell script (`backup.ps1`) paired with a rule in 
 | Smart project-root resolution | Walks upward to find `.git`, `package.json`, `composer.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, `.opencode`, `AGENTS.md`, `opencode.jsonc`, or `opencode.json` so all backups stay in `<project-root>/.backups/` instead of polluting nested subfolders |
 | Preserved relative paths | Stores `<project-root>/.backups/<YYYY-MM-DD_HH-mm-ss>_<slug>/<relative-path>` plus `.backup-meta.json` |
 | Multi-file patch support | Extracts every `*** Update File:`, `*** Delete File:`, and `*** Move File:` entry in a patch |
-| Interactive `/backups` TUI modal | Wide (`80%` default, configurable via `dialogWidth`) split-pane browser with colored filter pills (`^t` tool, `^g` date, `^r` retention, `^d` prune), parent backup path under each item, hunk-filtered unified diff preview with line numbers, and a 3-option `Enter` action popup (**[1] Restore file**, **[2] Open backup file**, or **[3] Open diff in editor**) |
+| Interactive `/backups` TUI & Desktop GUI | Wide (`80%` default, configurable via `dialogWidth`) split-pane TUI browser plus a persistent Desktop side panel (`Ctrl+Shift+B` opens/focuses, `Ctrl+Alt+B` toggles), with a fallback dialog when no session is active, scope and tool/date/retention filters, unified diff preview, restore confirmation, open file, and VS Code diff actions |
 | Instant hunk diff + external editor diff | Right-hand pane immediately renders changed hunks (`±3` context lines + line numbers), while action `[3]` (`D`) launches `code --diff <backup> <current>` (or `$OPENCODE_BACKUP_DIFF_CMD`) for a full side-by-side comparison |
 | Unlimited workspace discovery (`rootDir`) | Scans all `.backups/` folders across your workspace with no depth cap (`Infinity`) and no snapshot count cap, configurable via `rootDir` in `~/.config/opencode/auto-backup.json` or automatic workspace-root detection |
 | Pre-restore safety snapshot | Restoring a file automatically backs up the current file on disk first (`pre-restore`) |
@@ -46,7 +52,7 @@ npx @nandoblanco/opencode-local-backup install
 Or set a custom workspace root directory for `.backups/` discovery during setup:
 
 ```sh
-npx @nandoblanco/opencode-local-backup root "C:\MAMPFiles"
+npx @nandoblanco/opencode-local-backup root "/path/to/workspace"
 ```
 
 You can also install with OpenCode's native plugin CLI (because `package.json` exports both `.` and `./tui`, OpenCode loads both the server plugin and `/backups` TUI popup automatically):
@@ -59,7 +65,7 @@ opencode plugin add github:nandoblanco/opencode-local-backup
 
 ### Option 2: Manual Configuration
 
-Add `@nandoblanco/opencode-local-backup` to `~/.config/opencode/opencode.jsonc` and `~/.config/opencode/cli.json`:
+Add `@nandoblanco/opencode-local-backup` to the global `~/.config/opencode/opencode.jsonc`. OpenCode V2 loads the server, TUI, and Desktop parts from this single entry. The installer also writes `cli.json` for TUI setup; a separate manual entry there is not required:
 
 ```jsonc
 {
@@ -69,7 +75,7 @@ Add `@nandoblanco/opencode-local-backup` to `~/.config/opencode/opencode.jsonc` 
 			"options": {
 				"retentionDays": 30,
 				"debounceMs": 0,
-				"rootDir": "C:\\MAMPFiles",
+				"rootDir": "/path/to/workspace",
 				"dialogWidth": "80%"
 			}
 		}
@@ -79,7 +85,7 @@ Add `@nandoblanco/opencode-local-backup` to `~/.config/opencode/opencode.jsonc` 
 
 ### From a Local Directory
 
-Clone this repository and run `node ./index.js install` (or reference `"file:///path/to/opencode-local-backup"` in `opencode.jsonc` and `cli.json`):
+Clone this repository, run `npm ci` and `npm run build:gui`, then run `node ./index.js install` or reference the package directory in the global `opencode.jsonc`:
 
 ```json
 {
@@ -96,11 +102,12 @@ Once enabled, the plugin snapshots files automatically during normal coding sess
 - **Automatic Pre-Edit Snapshots (`execute.before` hook)**: Before `edit`, `write`, `patch`, `apply_patch`, or `multiedit` modifies an existing file on disk, the plugin copies the unmodified file into `<project-root>/.backups/<YYYY-MM-DD_HH-mm-ss>_<slug>/<relative-path>`.
 - **Agent Tools (`backup_list` & `backup_restore`)**: You can also ask the agent in chat to list or restore recent backups if needed.
 
-### Zero-Token TUI Commands
+### Zero-Token TUI & Desktop GUI Commands
 
-1. **Interactive `/backups` popup**: Run `/backups` or `/backups <query>` to open the split-pane snapshot browser.
-2. **Command palette**: Press `Ctrl+P` and select `Browse & restore file backups (0 tokens)...`.
-3. **Custom keybind**: Bind `auto.backup.browse` in `~/.config/opencode/cli.json` (the one-command installer binds `ctrl+alt+b` by default):
+1. **Interactive `/backups` browser**: Run `/backups` or `/backups <query>` to open the TUI popup or focus the persistent Desktop side panel (`Ctrl+Shift+B` / `Cmd+Shift+B`). Desktop opens a dialog when no session is active.
+2. **OpenCode Desktop right-side panel**: Press `Ctrl+Alt+B` (`Cmd+Opt+B` on macOS) or click the `Backups` button in the session header / titlebar to toggle the dockable right-side Backups panel.
+3. **Command palette**: Press `Ctrl+P` (`Cmd+K` / `Ctrl+K` in Desktop) and select `Browse & restore file backups (0 tokens)...`.
+4. **Custom TUI keybind**: Bind `auto.backup.browse` in `~/.config/opencode/cli.json` (the one-command installer binds `ctrl+alt+b` by default):
 
 ```json
 {
@@ -222,9 +229,9 @@ When pruning runs (`pruneOldBackups(rootDir, retentionDays)`):
 5. **Open side-by-side diff in external editor (`openBackupDiff`)**:
    - Launches a side-by-side comparison of `backupFilePath` vs `currentFilePath` as a detached process using `OPENCODE_BACKUP_DIFF_CMD` when configured, or `code --diff <backup> <current>` (VS Code) by default (`cmd /c code --diff ...` on Windows).
 
-### 6. Interactive OpenTUI `/backups` Modal Architecture (`tui.ts`)
+### 6. Interactive OpenTUI & OpenCode Desktop Modal Architecture (`tui.ts`, `gui.tsx`, `rpc.js`)
 
-1. **Wide modal layout (`applyDialogWidth` & `dialog.set`)**:
+1. **Wide OpenTUI modal layout (`applyDialogWidth` & `dialog.set`)**:
    - Calls `context.ui.dialog.show(...)` followed by `context.ui.dialog.set({ size: "xlarge", centered: true })` (calling `dialog.set` after `dialog.show` prevents `dialog.show` from resetting the dialog size to default).
    - Inside `onMount` and `createEffect`, `applyDialogWidth()` walks upward from `rootRef` to the outer `absolute`-positioned dialog container to set `width: "80%"` (or your configured `dialogWidth`), `maxWidth: "80%"`, and `minWidth: 76`.
 2. **Filter pills & multi-pane navigation**:
@@ -233,6 +240,10 @@ When pruning runs (`pruneOldBackups(rootDir, retentionDays)`):
 3. **`@opentui/solid` `Show` isolation for the 3-option Action Popup**:
    - Pressing `Enter` on a snapshot opens the inline Action Confirmation Sub-Popup (`[1] Restore file`, `[2] Open backup file`, `[3] Open diff in editor`).
    - In `@opentui/solid`, placing a reactive `createComponent(Show, ...)` directly inside a multi-child parent via `insert(node, child)` (without a marker node) causes `cleanChildren()` to clear all sibling children when `Show` transitions from `true` back to `false`. Wrapping `Show` inside its own dedicated single-child container `el("box", { flexDirection: "column", flexShrink: 0 }, createComponent(Show, ...))` ensures closing the sub-popup only clears that inner wrapper box.
+4. **OpenCode Desktop GUI & Typed RPC Bridge (`gui.tsx`, `gui.css`, `rpc.js`)**:
+   - Registers `BackupRpc` (`list`, `diff`, `restore`, `openFile`, `openDiff`, `prune`, `updateSettings`) on the server plugin (`ctx.rpc.register(BackupRpc, ...)`).
+    - Bundles `gui.tsx` and `gui.css` into `dist/gui-experimental.cjs` via `@opencode/plugin/gui/vite` (`npm run build:gui`). `/backups` and `Ctrl+Shift+B` open/focus the persistent side panel; `Ctrl+Alt+B` toggles it. Without an active session, commands open an `x-large` fallback dialog. The GUI registers a `session.panel` menu item and titlebar/vertical-tabs quick buttons.
+    - Desktop `list` requests default to a maximum of 1,000 entries; this is separate from the uncapped default in the underlying `listBackups()` function. RPC methods are separate from the two LLM tools below.
 
 ### 7. Agent Tools Registered by the Server Plugin
 
@@ -250,7 +261,8 @@ Normal backup, diff preview, and restore operations use zero LLM tokens:
 | Automatic pre-edit backups (`execute.before` hook) | **0 tokens** | Runs in plain Node.js inside OpenCode before `edit`, `write`, `patch`, `apply_patch`, or `multiedit` touches disk; injects no system prompt rules and appends nothing to chat |
 | Interactive `/backups` TUI modal (`Ctrl+Alt+B`) | **0 tokens** | Filtering snapshots, computing hunk diffs (`computeUnifiedDiff`), restoring files (`1`), opening files/diffs (`2`/`3`), cycling retention (`Ctrl+R`), and pruning (`Ctrl+D`) run directly on disk without an LLM request |
 | Standalone CLI (`npx @nandoblanco/opencode-local-backup ...`) | **0 tokens** | Runs directly in Node.js outside the model turn |
-| Agent tools (`backup_list`, `backup_restore`) | **~120 schema tokens** (+ turn tokens only if called) | Tool definitions are registered with the server so you can ask the agent to list or restore a snapshot in chat; using `/backups` instead avoids calling these tools |
+| Desktop browsing, diff, restore, and settings | **0 tokens** | Uses `BackupRpc` and local filesystem operations without a model turn |
+| Agent tools (`backup_list`, `backup_restore`) | **Variable schema tokens, plus turn tokens when called** | Tool definitions are registered with the server; exact cost depends on the model tokenizer. Using `/backups` avoids a model call, but does not remove registered tool schemas |
 
 ## Directory Structure
 
@@ -307,7 +319,7 @@ npx @nandoblanco/opencode-local-backup retention 0
 
 # View, set, or clear the starting root directory for scanning .backups/ folders
 npx @nandoblanco/opencode-local-backup root
-npx @nandoblanco/opencode-local-backup root "C:\MAMPFiles"
+npx @nandoblanco/opencode-local-backup root "/path/to/workspace"
 npx @nandoblanco/opencode-local-backup root --clear
 
 # Prune snapshots older than 30 days
@@ -322,7 +334,7 @@ Settings are stored in `~/.config/opencode/auto-backup.json` (created automatica
 {
 	"retentionDays": 30,
 	"debounceMs": 0,
-	"rootDir": "C:\\MAMPFiles",
+	"rootDir": "/path/to/workspace",
 	"dialogWidth": "80%"
 }
 ```
@@ -336,6 +348,16 @@ Settings are stored in `~/.config/opencode/auto-backup.json` (created automatica
 | `dialogWidth` | `OPENCODE_BACKUP_DIALOG_WIDTH` | `"80%"` | Width of the centered `/backups` TUI modal (`"80%"` or column count like `120`; also respects `OPENCODE_DIALOG_WIDTH`) |
 | *(editor)* | `OPENCODE_BACKUP_EDITOR` | `$VISUAL` / `$EDITOR` / OS default | Command used when choosing **[2] Open backup file** in the `/backups` action popup |
 | *(diff cmd)* | `OPENCODE_BACKUP_DIFF_CMD` | `code --diff` | Command used when choosing **[3] Open diff in editor** (`backup` vs `current` on disk) |
+
+## Development Checks
+
+Use Node.js 26.4 or newer for development: the OpenTUI dependency in the Desktop SDK declares that minimum, independently of this plugin's runtime engine range. Run `npm ci`, `npx playwright install chromium`, `npm test`, `npm run test:browser`, and `npm run build:gui` from the repository root. The browser checks use the repository's Playwright development dependency and run without sibling plugin repositories. They exercise mocked-host dialog and panel behavior, not a full OpenCode Desktop installation.
+
+The root `overrides` pin `glob` and `minimatch` to patched versions in the development dependency tree. npm overrides apply when developing this repository; they do not replace dependencies in the OpenCode host application.
+
+When all five sibling plugin repositories are available, `node test/panel-fallback.mjs --suite` runs the optional cross-plugin harness. This mode is not required for standalone backup development.
+
+Restore RPC requests require a project root and are resolved against the server's backup list before copying a snapshot. Client-supplied source and target paths must match a listed entry.
 
 ## License
 

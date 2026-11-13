@@ -6,6 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { BackupRpc } from "./rpc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliName = "open" + "code";
@@ -1061,6 +1062,9 @@ function restoreBackupFile(entry, options) {
   }
   const absBackupPath = path.resolve(entry.backupPath);
   const rootDir = entry.root ? path.resolve(entry.root) : "";
+  if (!rootDir) {
+    throw new Error("A project root is required to restore a backup snapshot");
+  }
   const rawTarget = entry.originalPath || (rootDir && entry.relativePath ? path.join(rootDir, entry.relativePath) : "");
   if (!rawTarget) {
     throw new Error("Invalid restore target path");
@@ -1339,6 +1343,85 @@ function createPluginDefinition() {
         if (toolReg) registrations.push(toolReg);
       }
 
+      if (ctx && ctx.rpc && typeof ctx.rpc.register === "function") {
+        const rpcReg = await ctx.rpc.register(BackupRpc, {
+          async list(input) {
+            const inp = input || {};
+            const includeSubprojects = inp.includeSubprojects !== undefined ? Boolean(inp.includeSubprojects) : true;
+            const targetDir = inp.rootDir && String(inp.rootDir).trim()
+              ? path.resolve(String(inp.rootDir).trim())
+              : workspaceDir;
+            const scanRoot = includeSubprojects ? resolveScanRootDir(targetDir) : targetDir;
+            const settings = readBackupSettings();
+            const entries = listBackups(targetDir, {
+              includeSubprojects: includeSubprojects,
+              limit: typeof inp.limit === "number" && inp.limit > 0 ? inp.limit : 1000
+            });
+            return JSON.parse(
+              JSON.stringify({
+                scanRoot: scanRoot,
+                workspaceDir: workspaceDir,
+                settings: settings,
+                entries: entries
+              })
+            );
+          },
+          async diff(input) {
+            const res = computeUnifiedDiff(
+              input.backupPath,
+              input.originalPath,
+              typeof input.maxLines === "number" && input.maxLines > 0 ? input.maxLines : 400
+            );
+            return JSON.parse(JSON.stringify(res));
+          },
+          async restore(input) {
+            const entry = input.entry;
+            if (!entry.root) throw new Error("A project root is required to restore a backup snapshot");
+            const match = listBackups(path.resolve(entry.root)).find(function (item) {
+              return item.backupPath === path.resolve(entry.backupPath) && item.originalPath === path.resolve(entry.originalPath);
+            });
+            if (!match) throw new Error("Backup snapshot entry not found in the project backup list");
+            const res = restoreBackupFile(match);
+            return JSON.parse(JSON.stringify(res));
+          },
+          async openFile(input) {
+            const res = openBackupFile(input.filePath);
+            return JSON.parse(JSON.stringify(res));
+          },
+          async openDiff(input) {
+            const res = openBackupDiff(input.backupPath, input.originalPath);
+            return JSON.parse(JSON.stringify(res));
+          },
+          async prune(input) {
+            const inp = input || {};
+            const targetDir = inp.rootDir && String(inp.rootDir).trim()
+              ? path.resolve(String(inp.rootDir).trim())
+              : workspaceDir;
+            const days = typeof inp.retentionDays === "number" && !Number.isNaN(inp.retentionDays)
+              ? Math.max(0, Math.floor(inp.retentionDays))
+              : resolveRetentionDays();
+            if (days <= 0) {
+              return { removed: 0, disabled: true, retentionDays: 0 };
+            }
+            const roots = collectBackupRoots(targetDir, true);
+            const scanRoot = resolveScanRootDir(targetDir);
+            if (!roots.includes(scanRoot)) roots.push(scanRoot);
+            if (!roots.includes(targetDir)) roots.push(targetDir);
+            let totalRemoved = 0;
+            for (const r of roots) {
+              const res = pruneOldBackups(r, days);
+              totalRemoved += res.removed;
+            }
+            return { removed: totalRemoved, disabled: false, retentionDays: days };
+          },
+          async updateSettings(input) {
+            const res = writeBackupSettings(input || {});
+            return JSON.parse(JSON.stringify(res));
+          }
+        });
+        if (rpcReg) registrations.push(rpcReg);
+      }
+
       return async function () {
         for (const reg of registrations) {
           if (reg && typeof reg.dispose === "function") {
@@ -1354,6 +1437,7 @@ const server = createPluginDefinition();
 export default server;
 export {
   server,
+  BackupRpc,
   resolveConfigDir,
   getSettingsFilePath,
   readBackupSettings,
