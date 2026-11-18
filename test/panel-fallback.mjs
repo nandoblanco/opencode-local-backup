@@ -30,6 +30,11 @@ try {
   assert.equal(await page.locator("#session-header button[aria-label]").count(), 0, "header has percentage badges only, no shortcut icons");
   await mkdir(".screenshots", { recursive: true });
   await page.screenshot({ path: ".screenshots/session-header-percentages-1280.png" });
+  assert.equal(await page.locator('button[data-action="vertical-tabs-search"] span').first().innerText(), "Search");
+  assert.equal(await page.locator('button[data-action="vertical-tabs-usage"] span').first().innerText(), "DLab Balance");
+  assert.equal(await page.locator('button[data-action="vertical-tabs-tokens"] span').first().innerText(), "Token Audit");
+  assert.equal((await page.locator("#sidebar").innerText()).includes("Ctrl+"), false, "no shortcuts shown in left sidebar");
+  await page.locator("#sidebar").screenshot({ path: ".screenshots/sidebar-nav-items.png" });
   }
   await mkdir(".screenshots", { recursive: true });
   for (const name of suite ? ["usage", "tokens", "search", "memory", "backup"] : ["backup"]) {
@@ -42,14 +47,34 @@ try {
     if (name === "usage") {
       assert.equal(await page.getByText("Token Explorer", { exact: true }).count(), 0);
       assert.equal(await page.getByRole("button", { name: "30 Days", exact: true }).count(), 0);
+      await page.locator("dialog").getByText("DLab Balance").first().waitFor();
+      await page.locator("dialog").getByText("Models Usage Breakdown", { exact: true }).waitFor();
+      await page.locator("dialog").getByRole("tab", { name: "Today", exact: true }).click();
+      await page.locator("dialog").getByRole("tab", { name: "This Week", exact: true }).click();
+      await page.locator("dialog").getByRole("tab", { name: "All Time", exact: true }).click();
+      await page.locator("dialog").getByRole("tab", { name: "Date Range", exact: true }).click();
+      await page.locator("dialog").getByRole("button", { name: "Apply Range", exact: true }).waitFor();
+      await page.screenshot({ path: ".screenshots/dlab-balance-date-range-1280.png" });
+      await page.locator("dialog").getByRole("tab", { name: "This Month", exact: true }).click();
     }
     if (name === "tokens") {
+      await page.locator("dialog").getByText("Token Audit").first().waitFor();
       await page.getByText("1.0K", { exact: true }).waitFor();
       await page.getByRole("button", { name: "All-Time", exact: true }).click();
       await page.getByText("3.0K", { exact: true }).waitFor();
       await page.getByRole("button", { name: "30 Days", exact: true }).click();
+      await page.locator("dialog summary").filter({ hasText: "Sort:" }).click();
+      await page.locator("dialog").getByRole("menuitem", { name: "Total w/ cache", exact: true }).click();
+      await page.locator("dialog input.olu-tag-add-input").fill("audit-verified");
+      await page.locator("dialog").getByRole("button", { name: "+ Tag", exact: true }).click();
+      await page.locator("dialog .olu-tag-pill-label").filter({ hasText: "#audit-verified" }).waitFor();
+      await page.screenshot({ path: ".screenshots/token-audit-per-session-1280.png" });
+      await page.locator("dialog").getByRole("tab", { name: /Per Tag/ }).click();
+      await page.locator("dialog").getByText(/Sessions Tagged #/).waitFor();
+      await page.screenshot({ path: ".screenshots/token-audit-per-tag-1280.png" });
+      await page.locator("dialog").getByRole("tab", { name: /Per Session/ }).click();
       await page.getByPlaceholder("Search topics or filter: project:cms model:claude #playwright * ...").fill("project:cms");
-      await page.getByRole("button", { name: "★ Liked", exact: true }).click();
+      await page.getByRole("button", { name: "★ Liked", exact: true }).first().click();
       await page.getByRole("button", { name: "Clear", exact: true }).click();
       assert.equal(await page.locator(".olu-provider-card").count(), 0);
     }
@@ -65,6 +90,14 @@ try {
     assert.equal(await page.locator("dialog").count(), 0, `${name}: active session uses panel`);
     assert.ok(await page.evaluate(name => window.fallbackTest.calls.some(key => key.startsWith(`${name}:`)), name));
     await page.waitForFunction(() => !document.querySelector('[role="progressbar"]'));
+    if (name === "search") {
+      await page.evaluate(() => window.fallbackTest.setSearchDelay(600));
+      await page.locator("#panel input").first().fill("architecture");
+      await page.locator("#panel .ols-loading-center").waitFor();
+      await page.screenshot({ path: ".screenshots/search-centered-spinner-1280.png" });
+      await page.waitForFunction(() => !document.querySelector("#panel .ols-loading-center"));
+      await page.evaluate(() => window.fallbackTest.setSearchDelay(0));
+    }
     await page.screenshot({ path: `.screenshots/${name}-panel-1280.png` });
   }
   if (suite) {

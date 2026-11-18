@@ -1105,17 +1105,11 @@ export default Plugin.define({
         iconWrap.appendChild(createSpriteIcon("archive", "size-4 shrink-0"));
 
         const labelSpan = document.createElement("span");
-        labelSpan.className = "min-w-0 flex-1 truncate text-start font-[460]";
+        labelSpan.className = "min-w-0 flex-1 truncate whitespace-nowrap text-start font-[460]";
         labelSpan.textContent = "Backups";
-
-        const kbdSpan = document.createElement("span");
-        kbdSpan.className =
-          "ms-auto shrink-0 text-[11px] leading-none text-v2-text-text-faint opacity-0 transition-opacity group-hover:opacity-100";
-        kbdSpan.textContent = "Ctrl+Shift+B";
 
         btn.appendChild(iconWrap);
         btn.appendChild(labelSpan);
-        btn.appendChild(kbdSpan);
 
         btn.addEventListener("click", (e) => {
           e.preventDefault();
