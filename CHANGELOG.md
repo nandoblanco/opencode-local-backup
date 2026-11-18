@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 (2026-11-17)
 
 - Removed the trailing keyboard shortcut badge (`Ctrl+Shift+B`) from the left sidebar `vertical-tabs-backups` button and added `whitespace-nowrap` so sidebar button labels do not wrap (`gui.tsx`).
 - Expanded the cross-plugin Playwright suite (`test/panel-fallback.tsx`, `test/panel-fallback.mjs`) to verify sidebar labels and icons (`Search`, `DLab Balance`, `Token Audit`), `DLab Balance` timeframe and date-range model breakdowns, `Token Audit` sorting, manual tagging, and `Per Tag` view, and `Search` centered loading spinner.
